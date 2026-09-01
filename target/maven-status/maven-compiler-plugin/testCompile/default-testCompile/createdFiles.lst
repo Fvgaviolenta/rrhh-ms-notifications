@@ -1,0 +1,4 @@
+com\rrhh\notifications\controller\NotificacionControllerIT.class
+com\rrhh\notifications\config\TestJwtConfig.class
+com\rrhh\notifications\service\NotificacionServiceTest.class
+com\rrhh\notifications\config\TestJwtConfig$1.class
