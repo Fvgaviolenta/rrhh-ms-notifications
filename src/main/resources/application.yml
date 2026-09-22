@@ -23,6 +23,8 @@ spring:
     enabled: true
     table: flyway_history_notifications
     locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
