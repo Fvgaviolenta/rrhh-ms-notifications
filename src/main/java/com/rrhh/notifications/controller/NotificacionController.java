@@ -6,10 +6,14 @@ import com.rrhh.notifications.dto.response.ServicioStatusResponse;
 import com.rrhh.notifications.service.NotificacionService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -24,6 +28,28 @@ public class NotificacionController {
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<NotificacionResponse>> listar() {
         return ApiResponse.ok(notificacionService.listarMisNotificaciones(), "Notificaciones del usuario autenticado");
+    }
+
+    @GetMapping("/notificaciones/no-leidas")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<List<NotificacionResponse>> noLeidas() {
+        return ApiResponse.ok(notificacionService.listarNoLeidas(), "Notificaciones no leídas");
+    }
+
+    @GetMapping("/notificaciones/no-leidas/count")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, Long> contarNoLeidas() {
+        return notificacionService.contarNoLeidas();
+    }
+
+    @PatchMapping("/notificaciones/{notificacion_id}/marcar-leida")
+    @PreAuthorize("isAuthenticated()")
+    public ApiResponse<NotificacionResponse> marcarLeida(
+            @PathVariable("notificacion_id") String id,
+            @RequestBody Map<String, Boolean> body
+    ) {
+        boolean leido = Boolean.TRUE.equals(body.get("leido"));
+        return ApiResponse.ok(notificacionService.marcarLeida(id, leido), "Notificación actualizada");
     }
 
     @GetMapping("/notificaciones/status")
