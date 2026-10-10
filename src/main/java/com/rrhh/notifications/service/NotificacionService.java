@@ -5,6 +5,7 @@ import com.rrhh.notifications.dto.response.NotificacionResponse;
 import com.rrhh.notifications.dto.response.ServicioStatusResponse;
 import com.rrhh.notifications.exception.DomainException;
 import com.rrhh.notifications.model.Notificacion;
+import com.rrhh.notifications.repository.IdentityUsuarioReferenciaRepository;
 import com.rrhh.notifications.repository.NotificacionRepository;
 import com.rrhh.notifications.security.TenantContext;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,17 +21,20 @@ public class NotificacionService {
     private static final String ESTADO_LEIDA = "LEIDA";
 
     private final NotificacionRepository notificacionRepository;
+    private final IdentityUsuarioReferenciaRepository identityUsuarioReferenciaRepository;
     private final TenantContext tenantContext;
     private final String rabbitmqHost;
     private final String redisHost;
 
     public NotificacionService(
             NotificacionRepository notificacionRepository,
+            IdentityUsuarioReferenciaRepository identityUsuarioReferenciaRepository,
             TenantContext tenantContext,
             @Value("${spring.rabbitmq.host:localhost}") String rabbitmqHost,
             @Value("${spring.data.redis.host:localhost}") String redisHost
     ) {
         this.notificacionRepository = notificacionRepository;
+        this.identityUsuarioReferenciaRepository = identityUsuarioReferenciaRepository;
         this.tenantContext = tenantContext;
         this.rabbitmqHost = rabbitmqHost;
         this.redisHost = redisHost;
@@ -73,10 +77,18 @@ public class NotificacionService {
 
     private TenantContext.AuthenticatedUser destinatario() {
         TenantContext.AuthenticatedUser actor = tenantContext.require();
-        if (actor.userId() == null || actor.userId().isBlank()) {
-            throw new DomainException(400, "El token no incluye user_id");
+        if (actor.userId() != null && !actor.userId().isBlank()) {
+            return actor;
         }
-        return actor;
+        if (actor.cognitoSub() == null || actor.cognitoSub().isBlank()) {
+            throw new DomainException(400, "El token no incluye un identificador de usuario");
+        }
+        String userId = identityUsuarioReferenciaRepository
+                .findByTenantIdAndCognitoSub(actor.tenantId(), actor.cognitoSub())
+                .map(referencia -> referencia.getId())
+                .orElseThrow(() -> new DomainException(404, "No existe una cuenta interna asociada al usuario autenticado"));
+        return new TenantContext.AuthenticatedUser(
+                actor.tenantId(), userId, actor.email(), actor.role(), actor.trabajadorId(), actor.cognitoSub());
     }
 
     public ServicioStatusResponse obtenerEstadoServicio() {
