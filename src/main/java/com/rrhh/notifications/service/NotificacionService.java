@@ -70,7 +70,7 @@ public class NotificacionService {
         Notificacion notificacion = notificacionRepository
                 .findByIdAndTenantIdAndDestinatarioId(id, actor.tenantId(), actor.userId())
                 .orElseThrow(() -> new DomainException(404, "Notificación no encontrada"));
-        
+
         if (request.leido()) {
             notificacion.setEstado(ESTADO_LEIDO);
         } else {
