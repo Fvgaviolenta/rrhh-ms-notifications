@@ -66,7 +66,7 @@ public class NotificacionService {
     @Transactional
     public NotificacionResponse marcarLeida(String id, MarcarLeidaRequest request) {
         TenantContext.AuthenticatedUser actor = tenantContext.require();
-        
+
         Notificacion notificacion = notificacionRepository
                 .findByIdAndTenantIdAndDestinatarioId(id, actor.tenantId(), actor.userId())
                 .orElseThrow(() -> new DomainException(404, "Notificación no encontrada"));
@@ -76,9 +76,9 @@ public class NotificacionService {
         } else {
             notificacion.setEstado(ESTADO_PENDIENTE);
         }
-        
+
         notificacionRepository.save(notificacion);
-        
+
         return toResponse(notificacion);
     }
 
