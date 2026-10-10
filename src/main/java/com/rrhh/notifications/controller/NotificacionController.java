@@ -1,9 +1,11 @@
 package com.rrhh.notifications.controller;
 
 import com.rrhh.notifications.dto.ApiResponse;
+import com.rrhh.notifications.dto.request.MarcarLeidaRequest;
 import com.rrhh.notifications.dto.response.NotificacionResponse;
 import com.rrhh.notifications.dto.response.ServicioStatusResponse;
 import com.rrhh.notifications.service.NotificacionService;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -42,14 +44,13 @@ public class NotificacionController {
         return notificacionService.contarNoLeidas();
     }
 
-    @PatchMapping("/notificaciones/{notificacion_id}/marcar-leida")
+    @PatchMapping("/notificaciones/{id}/marcar-leida")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<NotificacionResponse> marcarLeida(
-            @PathVariable("notificacion_id") String id,
-            @RequestBody Map<String, Boolean> body
+            @PathVariable("id") String id,
+            @Valid @RequestBody MarcarLeidaRequest request
     ) {
-        boolean leido = Boolean.TRUE.equals(body.get("leido"));
-        return ApiResponse.ok(notificacionService.marcarLeida(id, leido), "Notificación actualizada");
+        return ApiResponse.ok(notificacionService.marcarLeida(id, request), "Notificación actualizada");
     }
 
     @GetMapping("/notificaciones/status")

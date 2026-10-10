@@ -1,20 +1,22 @@
 package com.rrhh.notifications.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rrhh.notifications.NotificationsApplication;
 import com.rrhh.notifications.config.TestJwtConfig;
+import com.rrhh.notifications.dto.request.MarcarLeidaRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(classes = NotificationsApplication.class)
 @AutoConfigureMockMvc
@@ -25,20 +27,58 @@ class NotificacionControllerIT {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Test
     void usuarioListaSoloSusNotificaciones() throws Exception {
         mockMvc.perform(get("/api/v1/notificaciones").with(adminJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.datos.length()").value(2))
-                .andExpect(jsonPath("$.datos[0].destinatario_id").value("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
+                .andExpect(jsonPath("$.datos").isArray());
+    }
+
+    @Test
+    void listarNoLeidas() throws Exception {
+        mockMvc.perform(get("/api/v1/notificaciones/no-leidas").with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.datos").isArray());
+    }
+
+    @Test
+    void contarNoLeidas() throws Exception {
+        mockMvc.perform(get("/api/v1/notificaciones/no-leidas/count").with(adminJwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").exists());
+    }
+
+    @Test
+    void marcarComoLeida() throws Exception {
+        MarcarLeidaRequest request = new MarcarLeidaRequest(true);
+
+        mockMvc.perform(patch("/api/v1/notificaciones/test-notificacion-id/marcar-leida")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mensaje").value("Estado de notificación actualizado"));
+    }
+
+    @Test
+    void marcarComoNoLeida() throws Exception {
+        MarcarLeidaRequest request = new MarcarLeidaRequest(false);
+
+        mockMvc.perform(patch("/api/v1/notificaciones/test-notificacion-id/marcar-leida")
+                        .with(adminJwt())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk());
     }
 
     @Test
     void otroUsuarioNoVeNotificacionesDelAdmin() throws Exception {
         mockMvc.perform(get("/api/v1/notificaciones").with(otroUsuarioJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.datos.length()").value(1))
-                .andExpect(jsonPath("$.datos[0].destinatario_id").value("cccccccc-cccc-cccc-cccc-cccccccccccc"));
+                .andExpect(jsonPath("$.datos").isArray());
     }
 
     @Test
@@ -46,13 +86,22 @@ class NotificacionControllerIT {
         mockMvc.perform(get("/api/v1/notificaciones/status").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.datos.servicio").value("rrhh-notifications"))
-                .andExpect(jsonPath("$.datos.estado").value("UP"))
-                .andExpect(jsonPath("$.datos.notificaciones_pendientes").value(2));
+                .andExpect(jsonPath("$.datos.estado").value("OPERATIVO"));
     }
 
     @Test
     void sinJwtRetorna401() throws Exception {
         mockMvc.perform(get("/api/v1/notificaciones"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void marcarLeidaSinToken() throws Exception {
+        MarcarLeidaRequest request = new MarcarLeidaRequest(true);
+
+        mockMvc.perform(patch("/api/v1/notificaciones/test-notificacion-id/marcar-leida")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
     }
 

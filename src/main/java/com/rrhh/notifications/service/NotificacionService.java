@@ -1,5 +1,6 @@
 package com.rrhh.notifications.service;
 
+import com.rrhh.notifications.dto.request.MarcarLeidaRequest;
 import com.rrhh.notifications.dto.response.NotificacionResponse;
 import com.rrhh.notifications.dto.response.ServicioStatusResponse;
 import com.rrhh.notifications.exception.DomainException;
@@ -61,12 +62,12 @@ public class NotificacionService {
     }
 
     @Transactional
-    public NotificacionResponse marcarLeida(String id, boolean leido) {
+    public NotificacionResponse marcarLeida(String id, MarcarLeidaRequest request) {
         TenantContext.AuthenticatedUser actor = destinatario();
         Notificacion notificacion = notificacionRepository
                 .findByIdAndTenantIdAndDestinatarioId(id, actor.tenantId(), actor.userId())
                 .orElseThrow(() -> new DomainException(404, "Notificación no encontrada"));
-        notificacion.setEstado(leido ? ESTADO_LEIDA : ESTADO_PENDIENTE);
+        notificacion.setEstado(request.leido() ? ESTADO_LEIDA : ESTADO_PENDIENTE);
         return toResponse(notificacionRepository.save(notificacion));
     }
 
@@ -79,8 +80,9 @@ public class NotificacionService {
     }
 
     public ServicioStatusResponse obtenerEstadoServicio() {
-        TenantContext.AuthenticatedUser actor = tenantContext.require();
-        long pendientes = notificacionRepository.countByTenantIdAndEstado(actor.tenantId(), ESTADO_PENDIENTE);
+        TenantContext.AuthenticatedUser actor = destinatario();
+        long pendientes = notificacionRepository.countByTenantIdAndDestinatarioIdAndEstadoNot(
+                actor.tenantId(), actor.userId(), ESTADO_LEIDA);
         return new ServicioStatusResponse(
                 "rrhh-notifications",
                 "UP",
