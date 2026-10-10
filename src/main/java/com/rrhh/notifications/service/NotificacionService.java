@@ -87,12 +87,18 @@ public class NotificacionService {
         if (actor.userId() == null || actor.userId().isBlank()) {
             throw new DomainException(400, "El token no incluye user_id");
         }
-        return notificacionRepository.countByTenantIdAndEstado(actor.tenantId(), ESTADO_PENDIENTE);
+        return notificacionRepository.countByTenantIdAndDestinatarioIdAndEstado(
+                actor.tenantId(), actor.userId(), ESTADO_PENDIENTE
+        );
     }
 
     public ServicioStatusResponse obtenerEstadoServicio() {
         TenantContext.AuthenticatedUser actor = tenantContext.require();
-        long pendientes = notificacionRepository.countByTenantIdAndEstado(actor.tenantId(), ESTADO_PENDIENTE);
+        long pendientes = actor.userId() == null || actor.userId().isBlank()
+                ? 0
+                : notificacionRepository.countByTenantIdAndDestinatarioIdAndEstado(
+                        actor.tenantId(), actor.userId(), ESTADO_PENDIENTE
+                );
         return new ServicioStatusResponse(
                 "rrhh-notifications",
                 "OPERATIVO",

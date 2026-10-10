@@ -9,7 +9,7 @@ import java.util.Optional;
 public interface NotificacionRepository extends JpaRepository<Notificacion, String> {
     List<Notificacion> findByTenantIdAndDestinatarioIdOrderByCreadoEnDesc(String tenantId, String destinatarioId);
 
-    long countByTenantIdAndEstado(String tenantId, String estado);
+    long countByTenantIdAndDestinatarioIdAndEstado(String tenantId, String destinatarioId, String estado);
 
     Optional<Notificacion> findByIdAndTenantIdAndDestinatarioId(String id, String tenantId, String destinatarioId);
 
