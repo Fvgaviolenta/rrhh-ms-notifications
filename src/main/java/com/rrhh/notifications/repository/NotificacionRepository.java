@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface NotificacionRepository extends JpaRepository<Notificacion, String> {
+    List<Notificacion> findByTenantIdOrderByCreadoEnDesc(String tenantId);
     List<Notificacion> findByTenantIdAndDestinatarioIdOrderByCreadoEnDesc(String tenantId, String destinatarioId);
 
     List<Notificacion> findByTenantIdAndDestinatarioIdAndEstadoNotOrderByCreadoEnDesc(

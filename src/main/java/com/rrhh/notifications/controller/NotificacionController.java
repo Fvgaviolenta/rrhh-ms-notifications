@@ -32,6 +32,13 @@ public class NotificacionController {
         return ApiResponse.ok(notificacionService.listarMisNotificaciones(), "Notificaciones del usuario autenticado");
     }
 
+    @GetMapping("/plataforma/tenants/{tenant_id}/notificaciones")
+    @PreAuthorize("hasRole('OPERADOR_SAAS')")
+    public ApiResponse<List<NotificacionResponse>> listarPorTenantPlataforma(
+            @PathVariable("tenant_id") String tenantId) {
+        return ApiResponse.ok(notificacionService.listarPorTenantPlataforma(tenantId), "Notificaciones del tenant solicitado");
+    }
+
     @GetMapping("/notificaciones/no-leidas")
     @PreAuthorize("isAuthenticated()")
     public ApiResponse<List<NotificacionResponse>> noLeidas() {
