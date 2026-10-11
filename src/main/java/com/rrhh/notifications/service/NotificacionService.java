@@ -49,6 +49,12 @@ public class NotificacionService {
                 .toList();
     }
 
+    public List<NotificacionResponse> listarPorTenantPlataforma(String tenantId) {
+        exigirOperadorSaas();
+        return notificacionRepository.findByTenantIdOrderByCreadoEnDesc(tenantId)
+                .stream().map(this::toResponse).toList();
+    }
+
     public List<NotificacionResponse> listarNoLeidas() {
         TenantContext.AuthenticatedUser actor = destinatario();
         return notificacionRepository
@@ -89,6 +95,13 @@ public class NotificacionService {
                 .orElseThrow(() -> new DomainException(404, "No existe una cuenta interna asociada al usuario autenticado"));
         return new TenantContext.AuthenticatedUser(
                 actor.tenantId(), userId, actor.email(), actor.role(), actor.trabajadorId(), actor.cognitoSub());
+    }
+
+    private void exigirOperadorSaas() {
+        if (!com.rrhh.notifications.security.Roles.OPERADOR_SAAS.equals(
+                com.rrhh.notifications.security.Roles.authorityFromClaim(tenantContext.current().role()))) {
+            throw new DomainException(403, "Acceso exclusivo para el operador SaaS");
+        }
     }
 
     public ServicioStatusResponse obtenerEstadoServicio() {
