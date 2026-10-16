@@ -38,7 +38,7 @@ class NotificacionServiceTest {
     @BeforeEach
     void setUp() {
         notificacionService = new NotificacionService(
-                notificacionRepository, identityUsuarioReferenciaRepository, tenantContext, "localhost", "localhost");
+                notificacionRepository, identityUsuarioReferenciaRepository, tenantContext, "", "localhost");
     }
 
     @AfterEach
