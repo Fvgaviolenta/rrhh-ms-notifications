@@ -25,11 +25,6 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 0
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:rrhh}
-    password: ${RABBITMQ_PASSWORD:rrhh_local}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -46,6 +41,8 @@ management:
       exposure:
         include: health,info,metrics
 rrhh:
+  sqs:
+    events-queue-url: ${SQS_EVENTS_QUEUE_URL:}
   security:
     jwt:
       role-claim: ${JWT_ROLE_CLAIM:custom:role}

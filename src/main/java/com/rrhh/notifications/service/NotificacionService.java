@@ -23,20 +23,20 @@ public class NotificacionService {
     private final NotificacionRepository notificacionRepository;
     private final IdentityUsuarioReferenciaRepository identityUsuarioReferenciaRepository;
     private final TenantContext tenantContext;
-    private final String rabbitmqHost;
+    private final String sqsEventsQueueUrl;
     private final String redisHost;
 
     public NotificacionService(
             NotificacionRepository notificacionRepository,
             IdentityUsuarioReferenciaRepository identityUsuarioReferenciaRepository,
             TenantContext tenantContext,
-            @Value("${spring.rabbitmq.host:localhost}") String rabbitmqHost,
+            @Value("${rrhh.sqs.events-queue-url:}") String sqsEventsQueueUrl,
             @Value("${spring.data.redis.host:localhost}") String redisHost
     ) {
         this.notificacionRepository = notificacionRepository;
         this.identityUsuarioReferenciaRepository = identityUsuarioReferenciaRepository;
         this.tenantContext = tenantContext;
-        this.rabbitmqHost = rabbitmqHost;
+        this.sqsEventsQueueUrl = sqsEventsQueueUrl;
         this.redisHost = redisHost;
     }
 
@@ -111,7 +111,7 @@ public class NotificacionService {
         return new ServicioStatusResponse(
                 "rrhh-notifications",
                 "UP",
-                rabbitmqHost,
+                sqsEventsQueueUrl,
                 redisHost,
                 pendientes
         );
