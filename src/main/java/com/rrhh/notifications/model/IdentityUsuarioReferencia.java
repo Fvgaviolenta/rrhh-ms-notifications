@@ -24,4 +24,10 @@ public class IdentityUsuarioReferencia {
 
     @Column(name = "cognito_sub", length = 100)
     private String cognitoSub;
+
+    @Column(name = "trabajador_id", length = 36, columnDefinition = "CHAR(36)")
+    private String trabajadorId;
+
+    @Column(length = 50)
+    private String rol;
 }
