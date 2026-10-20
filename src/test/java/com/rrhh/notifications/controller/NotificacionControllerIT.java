@@ -24,6 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TestJwtConfig.class)
 class NotificacionControllerIT {
 
+    // Notificación del seed V2 cuyo destinatario es el usuario de adminJwt()
+    private static final String NOTIFICACION_DEL_ADMIN = "11111111-aaaa-aaaa-aaaa-aaaaaaaa0001";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -55,19 +58,19 @@ class NotificacionControllerIT {
     void marcarComoLeida() throws Exception {
         MarcarLeidaRequest request = new MarcarLeidaRequest(true);
 
-        mockMvc.perform(patch("/api/v1/notificaciones/test-notificacion-id/marcar-leida")
+        mockMvc.perform(patch("/api/v1/notificaciones/" + NOTIFICACION_DEL_ADMIN + "/marcar-leida")
                         .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mensaje").value("Estado de notificación actualizado"));
+                .andExpect(jsonPath("$.mensaje").value("Notificación actualizada"));
     }
 
     @Test
     void marcarComoNoLeida() throws Exception {
         MarcarLeidaRequest request = new MarcarLeidaRequest(false);
 
-        mockMvc.perform(patch("/api/v1/notificaciones/test-notificacion-id/marcar-leida")
+        mockMvc.perform(patch("/api/v1/notificaciones/" + NOTIFICACION_DEL_ADMIN + "/marcar-leida")
                         .with(adminJwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -86,7 +89,7 @@ class NotificacionControllerIT {
         mockMvc.perform(get("/api/v1/notificaciones/status").with(adminJwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.datos.servicio").value("rrhh-notifications"))
-                .andExpect(jsonPath("$.datos.estado").value("OPERATIVO"));
+                .andExpect(jsonPath("$.datos.estado").value("UP"));
     }
 
     @Test
