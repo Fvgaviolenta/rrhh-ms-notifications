@@ -38,4 +38,10 @@ public class Notificacion {
 
     @Column(name = "creado_en", nullable = false)
     private Instant creadoEn;
+
+    @Column(name = "tipo_evento", length = 60)
+    private String tipoEvento;
+
+    @Column(name = "referencia_id", length = 36, columnDefinition = "CHAR(36)")
+    private String referenciaId;
 }
