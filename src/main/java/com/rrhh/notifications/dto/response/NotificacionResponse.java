@@ -10,5 +10,7 @@ public record NotificacionResponse(
         String asunto,
         String cuerpo,
         String estado,
-        Instant creadoEn
+        Instant creadoEn,
+        String tipoEvento,
+        String referenciaId
 ) {}

@@ -126,7 +126,9 @@ public class NotificacionService {
                 notificacion.getAsunto(),
                 notificacion.getCuerpo(),
                 notificacion.getEstado(),
-                notificacion.getCreadoEn()
+                notificacion.getCreadoEn(),
+                notificacion.getTipoEvento(),
+                notificacion.getReferenciaId()
         );
     }
 }
