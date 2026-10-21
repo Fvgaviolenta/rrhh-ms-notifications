@@ -44,7 +44,7 @@ class NotificacionControllerIT {
     void notificacionExpuestaIncluyeTipoDeEventoParaRedirigir() throws Exception {
         mockMvc.perform(get("/api/v1/notificaciones").with(adminJwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.datos[?(@.id=='" + NOTIFICACION_DEL_ADMIN + "')].tipoEvento").value("contrato.creado"));
+                .andExpect(jsonPath("$.datos[?(@.id=='" + NOTIFICACION_DEL_ADMIN + "')].tipo_evento").value("contrato.creado"));
     }
 
     @Test
