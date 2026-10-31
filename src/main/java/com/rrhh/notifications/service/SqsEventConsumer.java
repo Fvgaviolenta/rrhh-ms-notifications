@@ -55,7 +55,7 @@ public class SqsEventConsumer {
         String tenant=required(event,"tenantId"), type=required(event,"eventType"); JsonNode payload=event.path("payload");
         String referencia=event.hasNonNull("aggregateId") && !event.get("aggregateId").asText().isBlank() ? event.get("aggregateId").asText() : null;
         List<IdentityUsuarioReferencia> recipients = switch(type) {
-            case "ausencia.solicitada" -> users.findByTenantIdAndRolIn(tenant, List.of("ADMIN_RRHH", "Admin de RRHH", "SUPERADMIN", "SuperAdmin"));
+            case "ausencia.solicitada", "acceso.solicitado" -> users.findByTenantIdAndRolIn(tenant, List.of("ADMIN_RRHH", "Admin de RRHH", "SUPERADMIN", "SuperAdmin"));
             case "ausencia.aprobada", "ausencia.rechazada", "contrato.creado", "contrato.finalizado" -> users.findByTenantIdAndTrabajadorId(tenant, required(payload,"trabajadorId")).stream().toList();
             default -> throw new IllegalArgumentException("Tipo de evento no soportado: " + type);
         };
@@ -64,10 +64,11 @@ public class SqsEventConsumer {
     }
 
     private void crear(String tenant,String userId,String type,String referencia,JsonNode payload) {
-        String asunto=switch(type){case "ausencia.solicitada"->"Nueva solicitud de ausencia";case "ausencia.aprobada"->"Solicitud de ausencia aprobada";case "ausencia.rechazada"->"Solicitud de ausencia rechazada";case "contrato.creado"->"Contrato registrado";case "contrato.finalizado"->"Contrato finalizado";default->"Actualización";};
-        String cuerpo=switch(type){case "ausencia.solicitada"->"Existe una solicitud de ausencia pendiente de revisión.";case "ausencia.aprobada"->"Tu solicitud de ausencia fue aprobada.";case "ausencia.rechazada"->"Tu solicitud de ausencia fue rechazada.";case "contrato.creado"->"Se registró tu contrato.";case "contrato.finalizado"->"Tu contrato fue finalizado.";default->"";};
+        String asunto=switch(type){case "ausencia.solicitada"->"Nueva solicitud de ausencia";case "acceso.solicitado"->"Nueva solicitud de acceso";case "ausencia.aprobada"->"Solicitud de ausencia aprobada";case "ausencia.rechazada"->"Solicitud de ausencia rechazada";case "contrato.creado"->"Contrato registrado";case "contrato.finalizado"->"Contrato finalizado";default->"Actualización";};
+        String cuerpo=switch(type){case "ausencia.solicitada"->"Existe una solicitud de ausencia pendiente de revisión.";case "acceso.solicitado"->solicitante(payload)+" solicitó acceso a la empresa.";case "ausencia.aprobada"->"Tu solicitud de ausencia fue aprobada.";case "ausencia.rechazada"->"Tu solicitud de ausencia fue rechazada.";case "contrato.creado"->"Se registró tu contrato.";case "contrato.finalizado"->"Tu contrato fue finalizado.";default->"";};
         if("ausencia.rechazada".equals(type) && payload.hasNonNull("motivoRechazo")) cuerpo += " Motivo: " + payload.get("motivoRechazo").asText();
         Notificacion n=new Notificacion(); n.setId(UUID.randomUUID().toString()); n.setTenantId(tenant); n.setDestinatarioId(userId); n.setCanal("IN_APP"); n.setAsunto(asunto); n.setCuerpo(cuerpo); n.setEstado("PENDIENTE"); n.setCreadoEn(Instant.now()); n.setTipoEvento(type); n.setReferenciaId(referencia); notifications.save(n);
     }
+    private String solicitante(JsonNode payload){return payload.hasNonNull("nombre")&&!payload.get("nombre").asText().isBlank()?payload.get("nombre").asText():required(payload,"email");}
     private String required(JsonNode node,String field){if(!node.hasNonNull(field)||node.get(field).asText().isBlank())throw new IllegalArgumentException("Evento sin "+field);return node.get(field).asText();}
 }
