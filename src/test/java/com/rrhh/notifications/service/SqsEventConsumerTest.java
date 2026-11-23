@@ -19,12 +19,19 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
+import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -59,13 +67,16 @@ class SqsEventConsumerTest {
     @Mock
     private TrabajadorReferenciaRepository trabajadores;
 
+    @Mock
+    private PlatformTransactionManager transacciones;
+
     private static final List<String> ADMINS = List.of("ADMIN_RRHH", "Admin de RRHH", "SUPERADMIN", "SuperAdmin");
 
     private SqsEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores, false, "");
+        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores, new TransactionTemplate(transacciones), false, "");
     }
 
     private String evento(String nombre) {
@@ -280,5 +291,49 @@ class SqsEventConsumerTest {
         consumer.procesar(atraso("e-atr", "2026-07-01T12:06:00Z", "\"minutosAtraso\":6"));
 
         assertEquals("Ana Pérez marcó entrada a las 08:06 con 6 minutos de atraso (turno 08:00).", notificacionGuardada().getCuerpo());
+    }
+
+    private SqsClient colaConUnMensaje(String body) {
+        SqsClient client = mock(SqsClient.class);
+        when(sqs.getIfAvailable()).thenReturn(client);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+                .messages(Message.builder().body(body).receiptHandle("r-1").build()).build());
+        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores,
+                new TransactionTemplate(transacciones), true, "https://sqs/cola");
+        return client;
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void consumirGuardaAvisosYEventoEnUnaSolaTransaccion() {
+        SqsClient client = colaConUnMensaje(evento("Pablo Postulante"));
+        unAdminEnElTenant();
+
+        consumer.consumir();
+
+        verify(transacciones).getTransaction(any());
+        verify(transacciones).commit(any());
+        verify(processed).save(any());
+        verify(client).deleteMessage(any(Consumer.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void consumirRevierteLosAvisosSiFallaUnoYNoBorraElMensaje() {
+        SqsClient client = colaConUnMensaje(evento("Pablo Postulante"));
+        IdentityUsuarioReferencia a1 = mock(IdentityUsuarioReferencia.class);
+        IdentityUsuarioReferencia a2 = mock(IdentityUsuarioReferencia.class);
+        when(a1.getId()).thenReturn("adm-1");
+        when(a2.getId()).thenReturn("adm-2");
+        when(users.findByTenantIdAndRolIn(eq("t-1"), anyList())).thenReturn(List.of(a1, a2));
+        when(notifications.save(any())).thenReturn(null).thenThrow(new IllegalStateException("base caida"));
+
+        consumer.consumir();
+
+        verify(transacciones).rollback(any());
+        verify(transacciones, never()).commit(any());
+        verify(processed, never()).save(any());
+        verify(client, never()).deleteMessage(any(Consumer.class));
+        verify(client, never()).deleteMessage(any(DeleteMessageRequest.class));
     }
 }

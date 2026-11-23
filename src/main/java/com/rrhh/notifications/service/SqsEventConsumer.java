@@ -14,7 +14,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
@@ -37,15 +37,16 @@ public class SqsEventConsumer {
     private final ProcessedEventRepository processed;
     private final IdentityUsuarioReferenciaRepository users;
     private final TrabajadorReferenciaRepository trabajadores;
+    private final TransactionTemplate tx;
     private final boolean enabled;
     private final String queueUrl;
 
     public SqsEventConsumer(ObjectProvider<SqsClient> sqs, ObjectMapper json, NotificacionRepository notifications,
                             ProcessedEventRepository processed, IdentityUsuarioReferenciaRepository users,
-                            TrabajadorReferenciaRepository trabajadores,
+                            TrabajadorReferenciaRepository trabajadores, TransactionTemplate tx,
                             @Value("${rrhh.sqs.enabled:false}") boolean enabled,
                             @Value("${rrhh.sqs.events-queue-url:}") String queueUrl) {
-        this.sqs=sqs; this.json=json; this.notifications=notifications; this.processed=processed; this.users=users; this.trabajadores=trabajadores; this.enabled=enabled; this.queueUrl=queueUrl;
+        this.sqs=sqs; this.json=json; this.notifications=notifications; this.processed=processed; this.users=users; this.trabajadores=trabajadores; this.tx=tx; this.enabled=enabled; this.queueUrl=queueUrl;
     }
 
     @Scheduled(fixedDelayString = "${rrhh.sqs.poll-delay-ms:5000}")
@@ -53,12 +54,23 @@ public class SqsEventConsumer {
         SqsClient client=sqs.getIfAvailable(); if(!enabled || queueUrl.isBlank() || client==null) return;
         List<Message> messages=client.receiveMessage(ReceiveMessageRequest.builder().queueUrl(queueUrl).maxNumberOfMessages(10).waitTimeSeconds(20).visibilityTimeout(60).build()).messages();
         for(Message message:messages) {
-            try { procesar(message.body()); client.deleteMessage(b -> b.queueUrl(queueUrl).receiptHandle(message.receiptHandle())); }
+            try { procesarEnTransaccion(message.body()); client.deleteMessage(b -> b.queueUrl(queueUrl).receiptHandle(message.receiptHandle())); }
             catch (Exception ignored) { /* SQS volverá a entregar el mensaje tras el visibility timeout. */ }
         }
     }
 
-    @Transactional
+    /**
+     * Los avisos y el processed_event se confirman juntos (S7): una llamada a procesar desde esta misma clase
+     * no pasa por el proxy de @Transactional, por eso la transaccion se abre aqui de forma explicita.
+     */
+    private void procesarEnTransaccion(String body) {
+        tx.executeWithoutResult(status -> {
+            try { procesar(body); }
+            catch (RuntimeException e) { throw e; }
+            catch (Exception e) { throw new IllegalArgumentException("Mensaje ilegible", e); }
+        });
+    }
+
     void procesar(String body) throws Exception {
         JsonNode event=json.readTree(body); String id=required(event,"eventId");
         if(processed.existsById(id)) return;
