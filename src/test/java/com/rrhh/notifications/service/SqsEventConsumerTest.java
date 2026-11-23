@@ -3,13 +3,16 @@ package com.rrhh.notifications.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rrhh.notifications.model.IdentityUsuarioReferencia;
 import com.rrhh.notifications.model.Notificacion;
+import com.rrhh.notifications.model.TrabajadorReferencia;
 import com.rrhh.notifications.repository.IdentityUsuarioReferenciaRepository;
 import com.rrhh.notifications.repository.NotificacionRepository;
 import com.rrhh.notifications.repository.ProcessedEventRepository;
+import com.rrhh.notifications.repository.TrabajadorReferenciaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -18,13 +21,24 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import software.amazon.awssdk.services.sqs.SqsClient;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,11 +56,16 @@ class SqsEventConsumerTest {
     @Mock
     private IdentityUsuarioReferenciaRepository users;
 
+    @Mock
+    private TrabajadorReferenciaRepository trabajadores;
+
+    private static final List<String> ADMINS = List.of("ADMIN_RRHH", "Admin de RRHH", "SUPERADMIN", "SuperAdmin");
+
     private SqsEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, false, "");
+        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores, false, "");
     }
 
     private String evento(String nombre) {
@@ -60,6 +79,44 @@ class SqsEventConsumerTest {
         IdentityUsuarioReferencia admin = mock(IdentityUsuarioReferencia.class);
         when(admin.getId()).thenReturn("adm-1");
         when(users.findByTenantIdAndRolIn(eq("t-1"), anyList())).thenReturn(List.of(admin));
+    }
+
+    /**
+     * Arma un aviso de atraso; {@code reemplazo} (p. ej. {@code "minutosAtraso":"12"})
+     * sustituye el campo del payload con la misma clave.
+     */
+    private String atraso(String eventId, String fechaHora, String reemplazo) {
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("trabajadorId", "\"trabajadorId\":\"trab-1\"");
+        payload.put("fechaHora", "\"fechaHora\":\"" + fechaHora + "\"");
+        payload.put("turnoHoraInicio", "\"turnoHoraInicio\":\"08:00\"");
+        payload.put("minutosAtraso", "\"minutosAtraso\":12");
+        payload.put("zona", "\"zona\":\"America/Santiago\"");
+        if (!reemplazo.isEmpty()) {
+            String clave = reemplazo.substring(1, reemplazo.indexOf('"', 1));
+            payload.put(clave, reemplazo);
+        }
+        return "{\"eventId\":\"" + eventId + "\",\"eventType\":\"asistencia.atraso.detectado\",\"tenantId\":\"t-1\","
+                + "\"aggregateId\":\"m-1\",\"payload\":{" + String.join(",", payload.values()) + "}}";
+    }
+
+    private TrabajadorReferencia ficha(String nombre, String apellido, String jefaturaId) {
+        TrabajadorReferencia t = mock(TrabajadorReferencia.class);
+        lenient().when(t.getNombre()).thenReturn(nombre);
+        lenient().when(t.getApellido()).thenReturn(apellido);
+        lenient().when(t.getJefaturaId()).thenReturn(jefaturaId);
+        return t;
+    }
+
+    private void conFicha(String nombre, String apellido, String jefaturaId) {
+        TrabajadorReferencia t = ficha(nombre, apellido, jefaturaId);
+        when(trabajadores.findByIdAndTenantId("trab-1", "t-1")).thenReturn(Optional.of(t));
+    }
+
+    private void jefeConUsuario(String jefaturaId) {
+        IdentityUsuarioReferencia jefe = mock(IdentityUsuarioReferencia.class);
+        when(jefe.getId()).thenReturn("usr-jefe");
+        when(users.findByTenantIdAndTrabajadorId("t-1", jefaturaId)).thenReturn(Optional.of(jefe));
     }
 
     private Notificacion notificacionGuardada() {
@@ -105,5 +162,123 @@ class SqsEventConsumerTest {
                  "payload":{"usuarioId":"u-9","email":"pablo@gmail.com","nombre":null}}""");
 
         assertEquals("pablo@gmail.com solicitó acceso a la empresa.", notificacionGuardada().getCuerpo());
+    }
+
+    @Test
+    void atrasoNotificaALaJefaturaDirecta() throws Exception {
+        conFicha("Ana", "Pérez", "jefe-1");
+        IdentityUsuarioReferencia jefe = mock(IdentityUsuarioReferencia.class);
+        when(jefe.getId()).thenReturn("usr-jefe");
+        when(users.findByTenantIdAndTrabajadorId("t-1", "jefe-1")).thenReturn(Optional.of(jefe));
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        Notificacion n = notificacionGuardada();
+        assertEquals("usr-jefe", n.getDestinatarioId());
+        assertEquals("t-1", n.getTenantId());
+        assertEquals("Atraso en marca de entrada", n.getAsunto());
+        assertEquals("Ana Pérez marcó entrada a las 08:12 con 12 minutos de atraso (turno 08:00).", n.getCuerpo());
+        assertEquals("asistencia.atraso.detectado", n.getTipoEvento());
+        assertEquals("m-1", n.getReferenciaId());
+        verify(users, never()).findByTenantIdAndRolIn(any(), anyList());
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    void atrasoSinJefaturaAvisaAAdmins(String jefaturaId) throws Exception {
+        conFicha("Ana", "Pérez", jefaturaId);
+        unAdminEnElTenant();
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        assertEquals("adm-1", notificacionGuardada().getDestinatarioId());
+        verify(users).findByTenantIdAndRolIn("t-1", ADMINS);
+        verify(users, never()).findByTenantIdAndTrabajadorId(any(), any());
+    }
+
+    @Test
+    void atrasoConJefeSinUsuarioAvisaAAdmins() throws Exception {
+        conFicha("Ana", "Pérez", "jefe-1");
+        when(users.findByTenantIdAndTrabajadorId("t-1", "jefe-1")).thenReturn(Optional.empty());
+        unAdminEnElTenant();
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        assertEquals("adm-1", notificacionGuardada().getDestinatarioId());
+        verify(users).findByTenantIdAndRolIn("t-1", ADMINS);
+    }
+
+    @Test
+    void atrasoDeTrabajadorNoEncontradoDiceUnTrabajador() throws Exception {
+        when(trabajadores.findByIdAndTenantId("trab-1", "t-1")).thenReturn(Optional.empty());
+        unAdminEnElTenant();
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        Notificacion n = notificacionGuardada();
+        assertEquals("adm-1", n.getDestinatarioId());
+        assertEquals("Un trabajador marcó entrada a las 08:12 con 12 minutos de atraso (turno 08:00).", n.getCuerpo());
+        verify(users).findByTenantIdAndRolIn("t-1", ADMINS);
+    }
+
+    @Test
+    void atrasoConNombreVacioDiceUnTrabajador() throws Exception {
+        conFicha("", null, "jefe-1");
+        jefeConUsuario("jefe-1");
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        Notificacion n = notificacionGuardada();
+        assertEquals("usr-jefe", n.getDestinatarioId());
+        assertTrue(n.getCuerpo().startsWith("Un trabajador marcó"), n.getCuerpo());
+    }
+
+    @Test
+    void atrasoBuscaSoloEnElTenantDelEvento() throws Exception {
+        conFicha("Ana", "Pérez", "jefe-1");
+        jefeConUsuario("jefe-1");
+
+        consumer.procesar(atraso("e-atr", "2026-11-03T11:12:40Z", ""));
+
+        verify(trabajadores).findByIdAndTenantId("trab-1", "t-1");
+        verify(users).findByTenantIdAndTrabajadorId("t-1", "jefe-1");
+        verifyNoMoreInteractions(trabajadores);
+    }
+
+    @Test
+    void atrasoRepetidoCreaUnaSolaNotificacion() throws Exception {
+        when(processed.existsById("e-atr")).thenReturn(false, true);
+        conFicha("Ana", "Pérez", "jefe-1");
+        jefeConUsuario("jefe-1");
+        String mensaje = atraso("e-atr", "2026-11-03T11:12:40Z", "");
+
+        consumer.procesar(mensaje);
+        consumer.procesar(mensaje);
+
+        verify(notifications, times(1)).save(any());
+        verify(processed, times(1)).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "\"minutosAtraso\":\"12\"", "\"fechaHora\":\"2026-11-03T11:12:40\"", "\"zona\":\"Marte/Olimpo\"", "\"fechaHora\":null"})
+    void atrasoConPayloadInvalidoNoCreaNotificaciones(String reemplazo) {
+        String mensaje = atraso("e-atr", "2026-11-03T11:12:40Z", reemplazo);
+
+        assertThrows(RuntimeException.class, () -> consumer.procesar(mensaje));
+
+        verify(notifications, never()).save(any());
+        verify(processed, never()).save(any());
+        verifyNoInteractions(trabajadores);
+    }
+
+    @Test
+    void atrasoUsaLaHoraLocalConHorarioDeInvierno() throws Exception {
+        conFicha("Ana", "Pérez", "jefe-1");
+        jefeConUsuario("jefe-1");
+
+        consumer.procesar(atraso("e-atr", "2026-07-01T12:06:00Z", "\"minutosAtraso\":6"));
+
+        assertEquals("Ana Pérez marcó entrada a las 08:06 con 6 minutos de atraso (turno 08:00).", notificacionGuardada().getCuerpo());
     }
 }
