@@ -30,4 +30,8 @@ public class IdentityUsuarioReferencia {
 
     @Column(length = 50)
     private String rol;
+
+    /** Correo de la cuenta: destino del correo de la plataforma (S7); nunca se toma del evento. */
+    @Column(name = "email")
+    private String email;
 }
