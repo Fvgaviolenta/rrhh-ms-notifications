@@ -48,6 +48,10 @@ rrhh:
     events-queue-url: ${SQS_EVENTS_QUEUE_URL:}
     region: ${AWS_REGION:us-east-1}
     poll-delay-ms: ${SQS_POLL_DELAY_MS:5000}
+  sns:
+    # Tema de correos de la plataforma (S7, ADR-020); lo entrega rrhh-infra. Vacío: solo notificación en la app.
+    correos-topic-arn: ${SNS_CORREOS_TOPIC_ARN:}
+    region: ${AWS_REGION:us-east-1}
   security:
     jwt:
       role-claim: ${JWT_ROLE_CLAIM:custom:role}

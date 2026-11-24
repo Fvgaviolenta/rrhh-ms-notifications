@@ -70,13 +70,16 @@ class SqsEventConsumerTest {
     @Mock
     private PlatformTransactionManager transacciones;
 
+    @Mock
+    private CorreoSnsPublisher correo;
+
     private static final List<String> ADMINS = List.of("ADMIN_RRHH", "Admin de RRHH", "SUPERADMIN", "SuperAdmin");
 
     private SqsEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores, new TransactionTemplate(transacciones), false, "");
+        consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores, new TransactionTemplate(transacciones), false, "", correo);
     }
 
     private String evento(String nombre) {
@@ -299,7 +302,7 @@ class SqsEventConsumerTest {
         when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
                 .messages(Message.builder().body(body).receiptHandle("r-1").build()).build());
         consumer = new SqsEventConsumer(sqs, new ObjectMapper(), notifications, processed, users, trabajadores,
-                new TransactionTemplate(transacciones), true, "https://sqs/cola");
+                new TransactionTemplate(transacciones), true, "https://sqs/cola", correo);
         return client;
     }
 
@@ -335,5 +338,72 @@ class SqsEventConsumerTest {
         verify(processed, never()).save(any());
         verify(client, never()).deleteMessage(any(Consumer.class));
         verify(client, never()).deleteMessage(any(DeleteMessageRequest.class));
+    }
+
+    // ---- plataforma.mensaje.enviado (S7, ADR-020)
+
+    private static String mensaje(String destinatarios) {
+        return "{\"eventId\":\"e-msg\",\"eventType\":\"plataforma.mensaje.enviado\",\"tenantId\":\"t-1\",\"aggregateId\":\"msg-1\","
+                + "\"payload\":{\"asunto\":\"Aviso\",\"cuerpo\":\"Hola\",\"autorEmail\":\"op@rrhh.local\",\"destinatarios\":" + destinatarios + "}}";
+    }
+
+    private void usuario(String id, String tenantId) {
+        IdentityUsuarioReferencia u = mock(IdentityUsuarioReferencia.class);
+        lenient().when(u.getId()).thenReturn(id);
+        lenient().when(u.getTenantId()).thenReturn(tenantId);
+        when(users.findById(id)).thenReturn(Optional.of(u));
+    }
+
+    @Test
+    void mensajeCreaUnaNotificacionPorDestinatarioYEnviaCadaCorreo() {
+        usuario("u-1", "t-1");
+        usuario("u-2", "t-1");
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"},{\"usuarioId\":\"u-2\",\"email\":\"b@x.cl\"}]"));
+        ArgumentCaptor<Notificacion> n = ArgumentCaptor.forClass(Notificacion.class);
+        verify(notifications, times(2)).save(n.capture());
+        assertEquals(List.of("u-1", "u-2"), n.getAllValues().stream().map(Notificacion::getDestinatarioId).toList());
+        Notificacion primera = n.getAllValues().get(0);
+        assertEquals("plataforma.mensaje.enviado", primera.getTipoEvento());
+        assertEquals("Aviso", primera.getAsunto());
+        assertEquals("Hola", primera.getCuerpo());
+        assertEquals("t-1", primera.getTenantId());
+        assertEquals("msg-1", primera.getReferenciaId());
+        verify(correo).enviar("a@x.cl", "Aviso", "Hola");
+        verify(correo).enviar("b@x.cl", "Aviso", "Hola");
+        verify(processed).save(any());
+    }
+
+    @Test
+    void destinatarioDeOtraEmpresaSeOmite() {
+        usuario("u-1", "t-1");
+        usuario("u-9", "t-2");
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"},{\"usuarioId\":\"u-9\",\"email\":\"z@x.cl\"}]"));
+        verify(notifications, times(1)).save(any());
+        verify(correo).enviar("a@x.cl", "Aviso", "Hola");
+        verify(correo, never()).enviar(eq("z@x.cl"), any(), any());
+    }
+
+    @Test
+    void mensajeSinDestinatariosEsIlegible() {
+        assertThrows(IllegalArgumentException.class, () -> consumer.procesar(mensaje("[]")));
+        verify(processed, never()).save(any());
+        verifyNoInteractions(correo);
+    }
+
+    @Test
+    void mensajeRepetidoNoSeEntregaDosVeces() {
+        when(processed.existsById("e-msg")).thenReturn(true);
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"}]"));
+        verify(notifications, never()).save(any());
+        verifyNoInteractions(correo);
+    }
+
+    @Test
+    void unErrorDeSnsNoDeshaceLaNotificacion() {
+        usuario("u-1", "t-1");
+        doThrow(new RuntimeException("SNS caído")).when(correo).enviar(any(), any(), any());
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"}]"));
+        verify(notifications).save(any());
+        verify(processed).save(any());
     }
 }
