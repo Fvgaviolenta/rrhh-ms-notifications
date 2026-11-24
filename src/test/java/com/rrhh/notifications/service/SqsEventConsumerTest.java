@@ -348,9 +348,14 @@ class SqsEventConsumerTest {
     }
 
     private void usuario(String id, String tenantId) {
+        usuario(id, tenantId, id.equals("u-2") ? "b@x.cl" : id.equals("u-9") ? "z@x.cl" : "a@x.cl");
+    }
+
+    private void usuario(String id, String tenantId, String email) {
         IdentityUsuarioReferencia u = mock(IdentityUsuarioReferencia.class);
         lenient().when(u.getId()).thenReturn(id);
         lenient().when(u.getTenantId()).thenReturn(tenantId);
+        lenient().when(u.getEmail()).thenReturn(email);
         when(users.findById(id)).thenReturn(Optional.of(u));
     }
 
@@ -405,5 +410,13 @@ class SqsEventConsumerTest {
         consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"}]"));
         verify(notifications).save(any());
         verify(processed).save(any());
+    }
+
+    @Test
+    void elCorreoSaleDeLaFilaDeIdentityNoDelEvento() {
+        usuario("u-1", "t-1", "admin.gamma@rrhh.local");
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"alguien@fuera.com\"}]"));
+        verify(correo).enviar("admin.gamma@rrhh.local", "Aviso", "Hola");
+        verify(correo, never()).enviar(eq("alguien@fuera.com"), any(), any());
     }
 }

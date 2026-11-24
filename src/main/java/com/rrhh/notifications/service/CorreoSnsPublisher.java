@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.sns.model.SubscribeRequest;
 
 import java.text.Normalizer;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -36,11 +37,13 @@ public class CorreoSnsPublisher {
     }
 
     /** Sin tema o sin cliente no hace nada: la notificación en la app es el registro del mensaje. */
-    public void enviar(String email, String asunto, String cuerpo) {
+    public void enviar(String correo, String asunto, String cuerpo) {
         SnsClient client = sns.getIfAvailable();
-        if (client == null || topicArn.isBlank()) {
+        if (client == null || topicArn.isBlank() || correo == null || correo.isBlank()) {
             return;
         }
+        // Siempre en minúsculas: la suscripción, su filtro y el atributo del mensaje deben coincidir exactamente.
+        String email = correo.trim().toLowerCase(Locale.ROOT);
         if (!suscrito(client, email)) {
             client.subscribe(SubscribeRequest.builder()
                     .topicArn(topicArn)

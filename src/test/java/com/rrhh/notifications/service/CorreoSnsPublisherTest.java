@@ -83,4 +83,17 @@ class CorreoSnsPublisherTest {
         publisher("").enviar("a@x.cl", "Aviso", "Hola");
         verifyNoInteractions(sns);
     }
+
+    @Test
+    void elCorreoSeNormalizaAMinusculasEnSuscripcionYAtributo() {
+        suscripciones();
+        publisher(TEMA).enviar(" Ana@X.cl ", "Aviso", "Hola");
+        ArgumentCaptor<SubscribeRequest> sub = ArgumentCaptor.forClass(SubscribeRequest.class);
+        verify(sns).subscribe(sub.capture());
+        assertEquals("ana@x.cl", sub.getValue().endpoint());
+        assertEquals("{\"destinatario\":[\"ana@x.cl\"]}", sub.getValue().attributes().get("FilterPolicy"));
+        ArgumentCaptor<PublishRequest> pub = ArgumentCaptor.forClass(PublishRequest.class);
+        verify(sns).publish(pub.capture());
+        assertEquals("ana@x.cl", pub.getValue().messageAttributes().get("destinatario").stringValue());
+    }
 }

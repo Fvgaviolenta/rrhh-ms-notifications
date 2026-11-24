@@ -116,7 +116,7 @@ public class SqsEventConsumer {
 
     /**
      * Mensaje de la plataforma (S7): una notificación IN_APP por destinatario que sea usuario de la empresa del evento
-     * (los demás se omiten) y el correo pendiente para cada uno.
+     * (los demás se omiten) y el correo pendiente para cada uno, al correo de su fila en identity_usuario.
      */
     private List<CorreoPendiente> entregarMensaje(String tenant,String referencia,JsonNode payload) {
         String asunto=required(payload,"asunto"), cuerpo=required(payload,"cuerpo");
@@ -124,11 +124,13 @@ public class SqsEventConsumer {
         if(!destinatarios.isArray() || destinatarios.isEmpty()) throw new IllegalArgumentException("Evento sin destinatarios");
         List<CorreoPendiente> correos=new ArrayList<>();
         for(JsonNode d:destinatarios) {
-            String usuarioId=required(d,"usuarioId"), email=required(d,"email");
-            boolean deLaEmpresa=users.findById(usuarioId).map(u->tenant.equals(u.getTenantId())).orElse(false);
-            if(!deLaEmpresa) { log.warn("Destinatario {} fuera de la empresa {}: se omite", usuarioId, tenant); continue; }
+            String usuarioId=required(d,"usuarioId");
+            Optional<IdentityUsuarioReferencia> usuario=users.findById(usuarioId).filter(u->tenant.equals(u.getTenantId()));
+            if(usuario.isEmpty()) { log.warn("Destinatario {} fuera de la empresa {}: se omite", usuarioId, tenant); continue; }
             guardar(tenant,usuarioId,MENSAJE,referencia,asunto,cuerpo);
-            correos.add(new CorreoPendiente(email,asunto,cuerpo));
+            // El correo sale de la fila de identity, nunca del evento: así solo llega a cuentas de la empresa.
+            String email=usuario.get().getEmail();
+            if(noVacio(email)) correos.add(new CorreoPendiente(email.trim(),asunto,cuerpo));
         }
         return correos;
     }
