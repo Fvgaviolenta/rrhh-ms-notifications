@@ -419,4 +419,21 @@ class SqsEventConsumerTest {
         verify(correo).enviar("admin.gamma@rrhh.local", "Aviso", "Hola");
         verify(correo, never()).enviar(eq("alguien@fuera.com"), any(), any());
     }
+
+    @Test
+    void mensajeEnviaUnaSolaCopiaConTodosLosDestinatarios() {
+        usuario("u-1", "t-1");
+        usuario("u-2", "t-1");
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"},{\"usuarioId\":\"u-2\",\"email\":\"b@x.cl\"}]"));
+        verify(correo, times(1)).enviarCopia("Aviso", "Hola", List.of("a@x.cl", "b@x.cl"));
+    }
+
+    @Test
+    void unErrorAlEnviarLaCopiaNoInterrumpeElProceso() {
+        usuario("u-1", "t-1");
+        doThrow(new RuntimeException("SNS caído")).when(correo).enviarCopia(any(), any(), anyList());
+        consumer.procesarMensaje(mensaje("[{\"usuarioId\":\"u-1\",\"email\":\"a@x.cl\"}]"));
+        verify(correo).enviar("a@x.cl", "Aviso", "Hola");
+        verify(processed).save(any());
+    }
 }

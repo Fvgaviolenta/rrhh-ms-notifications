@@ -30,10 +30,14 @@ public class CorreoSnsPublisher {
 
     private final ObjectProvider<SnsClient> sns;
     private final String topicArn;
+    private final String copiaA;
 
-    public CorreoSnsPublisher(ObjectProvider<SnsClient> sns, @Value("${rrhh.sns.correos-topic-arn:}") String topicArn) {
+    public CorreoSnsPublisher(ObjectProvider<SnsClient> sns,
+                              @Value("${rrhh.sns.correos-topic-arn:}") String topicArn,
+                              @Value("${rrhh.sns.correos-copia:}") String copiaA) {
         this.sns = sns;
         this.topicArn = topicArn == null ? "" : topicArn.trim();
+        this.copiaA = copiaA == null ? "" : copiaA.trim();
     }
 
     /** Sin tema o sin cliente no hace nada: la notificación en la app es el registro del mensaje. */
@@ -60,6 +64,18 @@ public class CorreoSnsPublisher {
                 .messageAttributes(Map.of("destinatario",
                         MessageAttributeValue.builder().dataType("String").stringValue(email).build()))
                 .build());
+    }
+
+    /**
+     * Copia de un mensaje de la plataforma al correo de {@code rrhh.sns.correos-copia} (el AdminPlataforma), para
+     * comprobar que los correos salen aunque las empresas de prueba tengan direcciones ficticias. Una sola copia por
+     * mensaje, con los destinatarios originales en el cuerpo; nada si no hay copia configurada o si ya es destinatario.
+     */
+    public void enviarCopia(String asunto, String cuerpo, List<String> destinatarios) {
+        if (copiaA.isBlank() || destinatarios.stream().anyMatch(copiaA::equalsIgnoreCase)) {
+            return;
+        }
+        enviar(copiaA, "[Copia] " + asunto, "Copia del mensaje enviado a: " + String.join(", ", destinatarios) + "\n\n" + cuerpo);
     }
 
     private boolean suscrito(SnsClient client, String email) {

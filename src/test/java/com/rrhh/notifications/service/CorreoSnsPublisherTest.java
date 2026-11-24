@@ -25,11 +25,15 @@ class CorreoSnsPublisherTest {
 
     private final SnsClient sns = mock(SnsClient.class);
 
-    @SuppressWarnings("unchecked")
     private CorreoSnsPublisher publisher(String tema) {
+        return publisher(tema, "");
+    }
+
+    @SuppressWarnings("unchecked")
+    private CorreoSnsPublisher publisher(String tema, String copia) {
         ObjectProvider<SnsClient> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(sns);
-        return new CorreoSnsPublisher(provider, tema);
+        return new CorreoSnsPublisher(provider, tema, copia);
     }
 
     private void suscripciones(Subscription... existentes) {
@@ -95,5 +99,28 @@ class CorreoSnsPublisherTest {
         ArgumentCaptor<PublishRequest> pub = ArgumentCaptor.forClass(PublishRequest.class);
         verify(sns).publish(pub.capture());
         assertEquals("ana@x.cl", pub.getValue().messageAttributes().get("destinatario").stringValue());
+    }
+
+    @Test
+    void enviaCopiaConAsuntoMarcadoYLosDestinatarios() {
+        suscripciones(Subscription.builder().protocol("email").endpoint("admin@x.cl").build());
+        publisher(TEMA, "Admin@x.cl").enviarCopia("Aviso", "Hola", java.util.List.of("a@x.cl", "b@x.cl"));
+        ArgumentCaptor<PublishRequest> pub = ArgumentCaptor.forClass(PublishRequest.class);
+        verify(sns).publish(pub.capture());
+        assertEquals("admin@x.cl", pub.getValue().messageAttributes().get("destinatario").stringValue());
+        assertEquals("[Copia] Aviso", pub.getValue().subject());
+        assertTrue(pub.getValue().message().startsWith("[Copia] Aviso\n\nCopia del mensaje enviado a: a@x.cl, b@x.cl\n\nHola"));
+    }
+
+    @Test
+    void sinCopiaConfiguradaNoEnviaCopia() {
+        publisher(TEMA, "").enviarCopia("Aviso", "Hola", java.util.List.of("a@x.cl"));
+        verifyNoInteractions(sns);
+    }
+
+    @Test
+    void noDuplicaSiLaCopiaYaEsDestinatario() {
+        publisher(TEMA, "a@x.cl").enviarCopia("Aviso", "Hola", java.util.List.of("A@x.cl"));
+        verifyNoInteractions(sns);
     }
 }
