@@ -33,7 +33,7 @@ public class NotificacionController {
     }
 
     @GetMapping("/plataforma/tenants/{tenant_id}/notificaciones")
-    @PreAuthorize("hasRole('OPERADOR_SAAS')")
+    @PreAuthorize("hasAnyRole('OPERADOR_SAAS','ADMIN_PLATAFORMA')")
     public ApiResponse<List<NotificacionResponse>> listarPorTenantPlataforma(
             @PathVariable("tenant_id") String tenantId) {
         return ApiResponse.ok(notificacionService.listarPorTenantPlataforma(tenantId), "Notificaciones del tenant solicitado");
