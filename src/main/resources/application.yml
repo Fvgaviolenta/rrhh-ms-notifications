@@ -51,6 +51,8 @@ rrhh:
   sns:
     # Tema de correos de la plataforma (S7, ADR-020); lo entrega rrhh-infra. Vacío: solo notificación en la app.
     correos-topic-arn: ${SNS_CORREOS_TOPIC_ARN:}
+    # Copia de cada mensaje de la plataforma (en el lab, el AdminPlataforma); vacío: sin copia.
+    correos-copia: ${SNS_CORREOS_COPIA:}
     region: ${AWS_REGION:us-east-1}
   security:
     jwt:

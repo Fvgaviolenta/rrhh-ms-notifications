@@ -92,6 +92,11 @@ public class SqsEventConsumer {
             try { correo.enviar(c.email(), c.asunto(), c.cuerpo()); }
             catch (RuntimeException e) { log.warn("No se pudo enviar el correo de la plataforma: {}", e.getMessage()); }
         }
+        if (correos != null && !correos.isEmpty()) {
+            CorreoPendiente primero = correos.get(0);
+            try { correo.enviarCopia(primero.asunto(), primero.cuerpo(), correos.stream().map(CorreoPendiente::email).toList()); }
+            catch (RuntimeException e) { log.warn("No se pudo enviar la copia del correo de la plataforma: {}", e.getMessage()); }
+        }
     }
 
     List<CorreoPendiente> procesar(String body) throws Exception {
